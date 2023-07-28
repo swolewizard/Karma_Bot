@@ -1,4 +1,4 @@
-**Things I've added:**
+## **Things I've added:**
 
 Karma Points System:  Give each other karma points with the "+karma @username" command. The bot tracks and displays the karma points for each user.
 
@@ -10,14 +10,14 @@ Karma Cooldown: To maintain a fair and balanced karma system, users can use the 
 
 Validity Checks: The bot thoroughly verifies the mentioned user's existence before processing the karma command. If the user tagged is not real or not a valid mention, the bot promptly notifies the user for accurate interactions.
 
-**Things I've yet to add:**
+## **Things I've yet to add:**
 
 A system to check users previous karma score and update the local db with that information.
 
 Additional commands to check users karma score.
 
 
-**Things I could add:**
+## **Things I could add:**
 
 Karma Leaderboard: Create a command to display a leaderboard of users with the highest karma points. This can encourage friendly competition and engagement within the server.
 
