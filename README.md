@@ -10,9 +10,11 @@
 
 **Validity Checks**: The bot thoroughly verifies the mentioned user's existence before processing the karma command. If the user tagged is not real or not a valid mention, the bot promptly notifies the user for accurate interactions.
 
+**Compatibility with Old Karma Bot**: Implemented a system to check users' previous karma scores from the old karma bot, if applicable, and update the local database with that information, with the command ".updatekarma"
+
 ## **Things I've yet to add**:
 
-**Compatibility with Old Karma Bot**: Implement a system to check users' previous karma scores from the old karma bot, if applicable, and update the local database with that information.
+
 
 **Additional Karma Check Commands**: Check users' karma scores beyond the current "+karma lookup @username" or ".kc @username" command. Allow users to view their own karma points, the karma of others.
 
