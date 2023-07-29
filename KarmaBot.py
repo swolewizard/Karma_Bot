@@ -1,4 +1,5 @@
 import discord
+import asyncio
 from discord.ext import commands
 import json
 import datetime
@@ -24,6 +25,9 @@ BOT_TOKEN = "bot token"
 
 # The number of messages to fetch in each batch
 BATCH_SIZE = 100
+
+# The regular expression pattern to extract karma scores from embed content
+KARMA_PATTERN = r"Current Karma: (\d+)" # This pattern captures any sequence of digits as the karma score
 
 
 def load_database():
@@ -52,6 +56,7 @@ def save_database(data):
 async def on_ready():
     print(f"We have logged in as {client.user}")
 
+
 @client.event
 async def on_message(message):
     if message.author.bot:
@@ -67,51 +72,79 @@ async def on_message(message):
             await message.channel.send("This command can only be used in the channel where the old bot posted karma embeds.")
             return
 
-        async for message in message.channel.history(limit=None, oldest_first=False, after=None):
-            # Check if the message contains an embed
-            if len(message.embeds) > 0:
-                embed = message.embeds[0]
-                embed_fields = embed.fields
+        # Create a set to keep track of processed user IDs
+        processed_users = set()
 
-                # Loop through the fields to find "Current Karma" value
-                for field in embed_fields:
-                    if "Current Karma" in field.name:
-                        # Extract the karma score from the field's value
-                        karma_value = field.name.split(":")[1].strip()
+        # Fetch messages in batches
+        all_messages = []
+        async for msg in message.channel.history(limit=None, oldest_first=False, before=message):
+            all_messages.append(msg)
+
+        batch_size = 100
+        for i in range(0, len(all_messages), batch_size):
+            batch = all_messages[i:i + batch_size]
+
+            for msg in batch:
+                # Check if the message contains an embed
+                if len(msg.embeds) > 0:
+                    embed = msg.embeds[0]
+                    embed_fields = embed.fields
+
+                    # Find the "Current Karma" field
+                    karma_field = next((field for field in embed_fields if "Current Karma" in field.name), None)
+                    if karma_field:
+                        # Extract the karma score from the field's name
+                        karma_value = karma_field.name.split(":")[1].strip()
                         print(karma_value)
+
                         try:
                             karma_score = int(karma_value)
 
-                            # Extract the user's name from the embed description without the emoji
-                            user_name_match = re.search(r"> (.+),", embed.description)
-                            if user_name_match:
-                                user_name = user_name_match.group(1).strip()
-                                print(user_name)
+                            # Fetch the previous message for this specific embed
+                            prev_karma_message = None
+                            async for prev_msg in message.channel.history(limit=None, oldest_first=False, before=msg):
+                                if prev_msg.content.startswith("+karma"):
+                                    prev_karma_message = prev_msg
+                                    break
 
-                                # Find the user with the same name in the guild
-                                mentioned_user = discord.utils.get(message.guild.members, name=user_name)
-                                print(mentioned_user)
-                                if mentioned_user:
-                                    user_id = mentioned_user.id
+                            if prev_karma_message:
+                                # Extract the user ID from the mention in the +karma command
+                                args = prev_karma_message.content.split()
+                                if len(args) == 2 and args[0] == "+karma":
+                                    user_mention = args[1]
+                                    # Extract user ID from the mention using regular expression
+                                    user_id_match = re.match(r"<@!?(\d+)>", user_mention)
+                                    if not user_id_match:
+                                        await message.channel.send(f"**{message.author.name}**, the user {user_mention} doesn't exist or is not a valid mention.")
+                                        break  # Stop searching if the mentioned user is not valid
 
-                                    # Update the new bot's local database with the karma score
-                                    if str(user_id) not in bot_data:
-                                        bot_data[str(user_id)] = 0
+                                    user_id = int(user_id_match.group(1))
 
-                                    bot_data[str(user_id)] += karma_score
+                                    # Check if the user ID has already been processed
+                                    if user_id not in processed_users:
+                                        # Update the new bot's local database with the karma score
+                                        if str(user_id) not in bot_data:
+                                            bot_data[str(user_id)] = 0
 
-                                    # Add a debug print line to see the match
-                                    print(f"Match found: User ID {user_id}, Karma Score {karma_score}")
+                                        bot_data[str(user_id)] += karma_score
 
-                            break  # Break out of the loop once "Current Karma" field is found
+                                        # Mark the user ID as processed
+                                        processed_users.add(user_id)
+
+                                        # Add a debug print line to see the match
+                                        # Fetch the member information
+                                        member = await message.guild.fetch_member(user_id)
+                                        username = member.name if member else "Unknown User"
+                                        print(f"Match found: User ID {user_id} ({username}), Karma Score {karma_score}")
+
                         except ValueError:
-                            print("Error parsing karma score from field:", field.value)
+                            print("Error parsing karma score from field:", karma_field.name)
 
         # Save the updated data to the database
         save_database(bot_data)
-            
+
         await message.channel.send("Karma scores have been updated based on the old bot's embed messages.")
-    
+
     
     elif message.content.startswith("+karma"):
         # Check cooldown for this user
