@@ -25,9 +25,6 @@ BOT_TOKEN = "bot token"
 # The number of messages to fetch in each batch
 BATCH_SIZE = 100
 
-# The regular expression pattern to extract karma scores from embed content
-KARMA_PATTERN = r"Current Karma: (\d+)"  # This pattern captures any sequence of digits as the karma score
-
 
 def load_database():
     try:
@@ -37,8 +34,19 @@ def load_database():
         return {}
 
 def save_database(data):
+    # Convert the set of processed users to a list before saving, if applicable
+    data_copy = data.copy()
+    if "processed_users" in data_copy and isinstance(data_copy["processed_users"], set):
+        data_copy["processed_users"] = list(data_copy["processed_users"])
+
+    # Convert the set of cooldowns to a dictionary before saving, if applicable
+    if "cooldowns" in data_copy and isinstance(data_copy["cooldowns"], set):
+        data_copy["cooldowns"] = dict(data_copy["cooldowns"])
+
     with open(DATABASE_FILE, "w") as f:
-        json.dump(data, f)
+        json.dump(data_copy, f)
+
+
 
 @client.event
 async def on_ready():
@@ -59,35 +67,49 @@ async def on_message(message):
             await message.channel.send("This command can only be used in the channel where the old bot posted karma embeds.")
             return
 
-        # Fetch messages in batches
-        async for message in message.channel.history(limit=None, oldest_first=True, after=None):
+        async for message in message.channel.history(limit=None, oldest_first=False, after=None):
             # Check if the message contains an embed
             if len(message.embeds) > 0:
-                embed_content = message.embeds[0].description
+                embed = message.embeds[0]
+                embed_fields = embed.fields
 
-                # Extract the karma score using the regular expression
-                karma_match = re.search(KARMA_PATTERN, embed_content)
+                # Loop through the fields to find "Current Karma" value
+                for field in embed_fields:
+                    if "Current Karma" in field.name:
+                        # Extract the karma score from the field's value
+                        karma_value = field.name.split(":")[1].strip()
+                        print(karma_value)
+                        try:
+                            karma_score = int(karma_value)
 
-                if karma_match:
-                    karma_score = int(karma_match.group(1))
+                            # Extract the user's name from the embed description without the emoji
+                            user_name_match = re.search(r"> (.+),", embed.description)
+                            if user_name_match:
+                                user_name = user_name_match.group(1).strip()
+                                print(user_name)
 
-                    # Extract role names using mentions in the embed fields
-                    role_mentions = re.findall(r'<span class="roleMention-11Aaqi desaturate-_Twf3u wrapper-1ZcZW-".*?>\s*<span>@(.+?)</span></span>', embed_content)
-                    role_names = [role_name.strip() for role_name in role_mentions]
+                                # Find the user with the same name in the guild
+                                mentioned_user = discord.utils.get(message.guild.members, name=user_name)
+                                print(mentioned_user)
+                                if mentioned_user:
+                                    user_id = mentioned_user.id
 
-                    # Update the new bot's local database with the karma score
-                    user_id = message.mentions[0].id
-                    if str(user_id) not in bot_data:
-                        bot_data[str(user_id)] = 0
+                                    # Update the new bot's local database with the karma score
+                                    if str(user_id) not in bot_data:
+                                        bot_data[str(user_id)] = 0
 
-                    bot_data[str(user_id)] += karma_score
+                                    bot_data[str(user_id)] += karma_score
 
-                    # Update the new bot's local database with the role names
-                    bot_data[f"roles_{user_id}"] = role_names
+                                    # Add a debug print line to see the match
+                                    print(f"Match found: User ID {user_id}, Karma Score {karma_score}")
+
+                            break  # Break out of the loop once "Current Karma" field is found
+                        except ValueError:
+                            print("Error parsing karma score from field:", field.value)
 
         # Save the updated data to the database
         save_database(bot_data)
-
+            
         await message.channel.send("Karma scores have been updated based on the old bot's embed messages.")
     
     
@@ -191,7 +213,7 @@ async def on_message(message):
                 if current_karma >= threshold:
                     user_role = message.guild.get_role(role_id)
                     break
-            # Find the highest star role achieved by the user
+            # Find the highest role achieved by the user
             for threshold, star_role_id in reversed(list(karma_threshold_stars.items())):
                 if current_karma >= threshold:
                     user_star = message.guild.get_role(star_role_id)
