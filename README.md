@@ -35,3 +35,5 @@ It works, but it takes a long time to scan.
 **Role Removal**: Implement a command to remove a specific karma role from a user if necessary.
 
 **User Karma Lookup**: Allow users to check their own karma points or the karma points of other users using a command.
+
+++Assigning your IGN/Gamertag/PSN ID"": Use the command '.ign NAME' to add your in-game name to the karma points system embed message.
