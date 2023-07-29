@@ -1,4 +1,5 @@
 import discord
+from discord.ext import commands
 import json
 import datetime
 import time
@@ -20,6 +21,13 @@ COOLDOWN_TIME = 300
 
 # Add your bot token here
 BOT_TOKEN = "bot token"
+
+# The number of messages to fetch in each batch
+BATCH_SIZE = 100
+
+# The regular expression pattern to extract karma scores from embed content
+KARMA_PATTERN = r"Current Karma: (\d+)"  # This pattern captures any sequence of digits as the karma score
+
 
 def load_database():
     try:
@@ -45,7 +53,45 @@ async def on_message(message):
     if message.channel.id != MONITORED_CHANNEL_ID:
         return
 
-    if message.content.startswith("+karma"):
+    if message.content.startswith(".updatekarma"):
+        # Check if the command is used in the correct channel (the old bot's channel)
+        if message.channel.id != MONITORED_CHANNEL_ID:
+            await message.channel.send("This command can only be used in the channel where the old bot posted karma embeds.")
+            return
+
+        # Fetch messages in batches
+        async for message in message.channel.history(limit=None, oldest_first=True, after=None):
+            # Check if the message contains an embed
+            if len(message.embeds) > 0:
+                embed_content = message.embeds[0].description
+
+                # Extract the karma score using the regular expression
+                karma_match = re.search(KARMA_PATTERN, embed_content)
+
+                if karma_match:
+                    karma_score = int(karma_match.group(1))
+
+                    # Extract role names using mentions in the embed fields
+                    role_mentions = re.findall(r'<span class="roleMention-11Aaqi desaturate-_Twf3u wrapper-1ZcZW-".*?>\s*<span>@(.+?)</span></span>', embed_content)
+                    role_names = [role_name.strip() for role_name in role_mentions]
+
+                    # Update the new bot's local database with the karma score
+                    user_id = message.mentions[0].id
+                    if str(user_id) not in bot_data:
+                        bot_data[str(user_id)] = 0
+
+                    bot_data[str(user_id)] += karma_score
+
+                    # Update the new bot's local database with the role names
+                    bot_data[f"roles_{user_id}"] = role_names
+
+        # Save the updated data to the database
+        save_database(bot_data)
+
+        await message.channel.send("Karma scores have been updated based on the old bot's embed messages.")
+    
+    
+    elif message.content.startswith("+karma"):
         # Check cooldown for this user
         author_id = str(message.author.id)
         current_time = int(time.time())
@@ -110,6 +156,8 @@ async def on_message(message):
 
             current_karma = bot_data.get(str(user_id), 0)
 
+            
+            
             # Give roles based on karma score
             for threshold, role_id in karma_threshold_roles.items():
                 if current_karma >= threshold:
@@ -136,7 +184,6 @@ async def on_message(message):
                     else:
                         print(f"Star role not found or already assigned: {star_role_id}")
                         
-            # Check if the user has a role
             user_role = None
             user_star = None
             # Find the highest role achieved by the user
