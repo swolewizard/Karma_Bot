@@ -32,12 +32,16 @@ def load_database():
                 # Migrate the old save format to the new one
                 data = {"userids": data, "cooldowns": {}}
             return data
-    except FileNotFoundError:
+    except (FileNotFoundError, json.JSONDecodeError):
         return {"userids": {}, "cooldowns": {}}
 
 def save_database(data):
-    with open(DATABASE_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=4, ensure_ascii=False)
+    try:
+        with open(DATABASE_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=4, ensure_ascii=False)
+    except Exception as e:
+        print(f"Error saving database: {e}")
+
 
 
 @client.event
