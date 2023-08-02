@@ -139,18 +139,34 @@ async def on_message(message):
                     else:
                         print(f"Role not found or already assigned: {role_id}")
 
-            # Give star roles based on karma score
+            # Find the highest star role the user is eligible for
+            eligible_star_role = None
             for threshold, star_role_id in karma_threshold_stars.items():
                 if current_karma >= threshold:
-                    star_role = message.guild.get_role(star_role_id)
-                    if star_role and star_role not in mentioned_user.roles:
+                    eligible_star_role = message.guild.get_role(star_role_id)
+
+            # Check if the user already has a star role and it's the highest eligible one
+            if eligible_star_role:
+                existing_star_role = next((role for role in mentioned_user.roles if role.id in karma_threshold_stars.values()), None)
+                if existing_star_role and existing_star_role.id == eligible_star_role.id:
+                    print(f"{mentioned_user.name} already has the highest eligible star role.")
+                else:
+                    # Remove existing star role (if any)
+                    if existing_star_role:
                         try:
-                            await mentioned_user.add_roles(star_role)
-                            print(f"Gave {mentioned_user.name} star role: {star_role.name}")
+                            await mentioned_user.remove_roles(existing_star_role)
+                            print(f"Removed {mentioned_user.name}'s existing star role: {existing_star_role.name}")
                         except discord.Forbidden:
-                            print(f"Bot does not have permission to add star role: {star_role.name}")
-                    else:
-                        print(f"Star role not found or already assigned: {star_role_id}")
+                            print(f"Bot does not have permission to remove star role: {existing_star_role.name}")
+
+                    # Give the highest eligible star role
+                    try:
+                        await mentioned_user.add_roles(eligible_star_role)
+                        print(f"Gave {mentioned_user.name} star role: {eligible_star_role.name}")
+                    except discord.Forbidden:
+                        print(f"Bot does not have permission to add star role: {eligible_star_role.name}")
+            else:
+                print("No eligible star role found for the user.")
 
             user_role = None
             user_star = None
